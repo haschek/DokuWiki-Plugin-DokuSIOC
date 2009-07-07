@@ -88,7 +88,7 @@ class SIOCDokuWikiArticle extends SIOCObject
         
         if ($this->_content)
         {
-            $rdf .= "\t<sioc:content>" . pureContent($this->_content) . "</sioc:content>\n";
+            $rdf .= "\t<sioc:content><![CDATA[" . pureContent($this->_content) . "]]></sioc:content>\n";
         }
 
         if ($this->_content_encoded)
