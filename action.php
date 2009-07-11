@@ -1,6 +1,46 @@
 <?php
 /**
- */
+ * DokuSIOC - 
+ *
+ * version 0.1
+ *
+ * 
+ *
+ * METADATA
+ *
+ * @author    Michael Haschke @ eye48.com
+ * @copyright 2009 Michael Haschke
+ * @license   http://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU General Public License 2.0 (GPLv2)
+ * @version   0.1
+ *
+ * WEBSITES
+ *
+ * @link      http://eye48.com/go/dokusioc Plugin Website and Overview
+ *
+ * LICENCE
+ * 
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation, version 2 of the License.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * @link      http://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU General Public License 2.0 (GPLv2)
+ *
+ * CHANGELOG
+ *
+ * 0.1
+ * - exchange licence b/c CC-BY-SA was incompatible with GPL
+ * - restructuring code base
+ * - fix: wrong meta link for revisions
+ * - add: possibility to send noindex by x-robots-tag via HTTP header
+ * - add: soft check for requested application type
+ * - mod: use search method to get container content on next sub level
+ * poc
+ * - proof of concept release under CC-BY-SA
+ **/
  
 if(!defined('DOKU_INC')) die();
 if(!defined('DOKU_PLUGIN')) define('DOKU_PLUGIN',DOKU_INC.'lib/plugins/');
@@ -18,9 +58,9 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         return array(
 	         'author' => 'Michael Haschke',
 	         'email'  => 'haschek@eye48.com',
-	         'date'   => '2009-04-27',
-	         'name'   => 'SIOC Export (action plugin component)',
-	         'desc'   => 'Used to add alternate link of SIOC RDF document to meta header.',
+	         'date'   => '2009-07-08',
+	         'name'   => 'DokuSIOC',
+	         'desc'   => 'Adds alternate link to SIOC-RDF document to meta header, creates SIOC version of wiki content and checks the requested application type.',
 	         'url'    => 'http://eye48.com/go/dokusioc'
 	         );
     }
@@ -114,7 +154,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             case 'post':
             default:
                 $title = htmlentities("SIOC document as RDF-XML for article '".$INFO['meta']['title']."'");
-                $queryAttr =  array();
+                $queryAttr =  array('type'=>'post');
                 if (isset($_GET['rev']) && $_GET['rev'] == intval($_GET['rev']))
                     $queryAttr['rev'] = $_GET['rev'];
                 break;
@@ -124,7 +164,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         $metalink['href'] = getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'));
 
         // forward to rdfxml document if requested
-        if (isRdfXmlRequest())
+        if ($this->isRdfXmlRequest())
         {
             header('Location: '.$metalink['href']);
         }
@@ -191,12 +231,60 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         }
     
         // export
-        // TODO: header("X-Robots-Tag: noindex", true);
+        if ($this->getConf('noindx')) 
+            header("X-Robots-Tag: noindex", true);
         $rdf->export();
         
         die();
     }
     
+    function isRdfXmlRequest()
+    {
+        // get accepted types
+        $http_accept = trim($_SERVER['HTTP_ACCEPT']);
+        
+        // soft check, route to RDF when client requests it (don't check quality of request)
+        if ($this->getConf('softck') && strpos($http_accept, 'application/rdf+xml') !== false)
+        {
+            return true;
+        }
+        
+        // hard check, only serve RDF if it is requested first or equal to first type
+    
+        // save accepted types in array
+        $accepted = explode(',', $http_accept);
+        
+        if (count($accepted)>0)
+        {
+            // extract accepting ratio
+            $test_accept = array();
+            foreach($accepted as $format)
+            {
+                $formatspec = explode(';',$format);
+                $k = trim($formatspec[0]);
+                if (count($formatspec)==2)
+                {
+                    $test_accept[$k] = trim($formatspec[1]);
+                }
+                else
+                {
+                    $test_accept[$k] = 'q=1.0';
+                }
+            }
+            
+            // sort by ratio
+            arsort($test_accept); $accepted_order = array_keys($test_accept);
+            
+            if ($accepted_order[0] == 'application/rdf+xml' || $test_accept['application/rdf+xml'] == 'q=1.0')
+            {
+                return true;
+            }
+        }
+
+        return false;
+
+    }
+
     /* -- private helpers --------------------------------------------------- */
     
     function _getContenttype()
@@ -318,17 +406,38 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
                             'utf-8',
                             'http://eye48.com/go/dokusioc'
                             );
+
         // create container object
         $wikicontainer = new SIOCDokuWikiContainer($ID, getAbsUrl(wl($ID)));
+
         /* container is type=wiki */ if ($ID == $conf['start']) $wikicontainer->isWiki();
         /* sioc:name */ if ($INFO['exists']) $wikicontainer->addTitle($INFO['meta']['title']);
-        // add links to wiki articles
-        $offset = 0; $conf['recent'] = 10; // set to 10 manually
-        if (!$_GET['page']) $_GET['page'] = 1;
-        if ($_GET['page']) $offset = ($_GET['page']-1) * $conf['recent'];
-        $recents = getRecents($offset, $conf['recent'], $ID, RECENTS_SKIP_DELETED + RECENTS_SKIP_MINORS);
-        if (count($recents)>0) $wikicontainer->addArticles($recents, $conf['recent'], $_GET['page']);
-        //print_r($recents);die();
+
+        // search next level entries (posts, sub containers) in container
+        require_once(DOKU_INC.'inc/search.php');
+        $dir  = utf8_encodeFN(str_replace(':','/',$ID));
+        $entries = array();
+        $posts = array();
+        $containers = array();
+        search($entries,$conf['datadir'],'search_index',array('ns' => $ID),$dir);
+        foreach ($entries as $entry)
+        {
+            if ($entry['type'] === 'f')
+            {
+                // wikisite
+                $posts[] = $entry;
+            }
+            elseif($entry['type'] === 'd')
+            {
+                // sub container
+                $containers[] = $entry;
+            }
+        }
+        
+        if (count($posts)>0) $wikicontainer->addArticles($posts);
+        if (count($containers)>0) $wikicontainer->addContainers($containers);
+
+        //print_r($containers);die();
         
         // add container to exporter
         $exporter->addObject($wikicontainer);
@@ -429,45 +538,6 @@ if (!function_exists('getDwUserInfo'))
         {
             return false;
         }
-    }
-}
-
-if (!function_exists('isRdfXmlRequest'))
-{
-    function isRdfXmlRequest()
-    {
-        // save accepted types in array
-        $accepted = explode(',',trim($_SERVER['HTTP_ACCEPT']));
-        
-        if (count($accepted)>0)
-        {
-            // extract accepting ratio
-            $test_accept = array();
-            foreach($accepted as $format)
-            {
-                $formatspec = explode(';',$format);
-                $k = trim($formatspec[0]);
-                if (count($formatspec)==2)
-                {
-                    $test_accept[$k] = trim($formatspec[1]);
-                }
-                else
-                {
-                    $test_accept[$k] = 'q=1.0';
-                }
-            }
-            
-            // sort by ratio
-            arsort($test_accept); $accepted_order = array_keys($test_accept);
-            
-            if ($accepted_order[0] == 'application/rdf+xml' || $test_accept['application/rdf+xml'] == 'q=1.0')
-            {
-                return true;
-            }
-        }
-
-        return false;
-
     }
 }
 

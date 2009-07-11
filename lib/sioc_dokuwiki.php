@@ -284,8 +284,7 @@ class SIOCDokuWikiContainer extends SIOCObject
     var $_id = null;
     var $_url = null;
     var $_posts = array();
-    var $_offset = 0;
-    var $_page = 0;
+    var $_subcontainers = array();
     var $_title = null;
 
     function SIOCDokuWikiContainer ($id, $url)
@@ -295,7 +294,8 @@ class SIOCDokuWikiContainer extends SIOCObject
     }
     
     function isWiki() { $this->_type = 'sioct:Wiki'; }
-    function addArticles($posts, $offset, $page) { $this->_posts = $posts; $this->_offset = $offset; $this->_page = $page; }
+    function addArticles($posts) { $this->_posts = $posts; }
+    function addContainers($containers) { $this->_subcontainers = $containers; }
     function addTitle($title) { $this->_title = $title; }
 
     function getContent( &$exp ) {
@@ -306,27 +306,29 @@ class SIOCDokuWikiContainer extends SIOCObject
             $rdf .= "\t<sioc:name>".htmlentities($this->_title)."</sioc:name>\n";
         }
 
-        if (count($this->_posts)>0)
+        foreach($this->_posts as $article)
         {
-            foreach($this->_posts as $article)
-            {
-                if ($article['perms'] || !isset($article['perms'])) // perms is not available in older
-                {
-                    $rdf .= "\t<sioc:container_of>\n";
-                    // TODO: inluding title $rdf .= "\t\t<sioc:Post rdf:about=\"".."\" dc:title=\"".."\">\n";
-                    $rdf .= "\t\t<sioc:Post rdf:about=\"".getAbsUrl(wl($article['id']))."\">\n";
-                    $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('post',$article['id'])."\"/>\n";
-                    $rdf .= "\t\t</sioc:Post>\n";
-                    $rdf .= "\t</sioc:container_of>\n";
-                }
-            }
-            
-            if (count($this->_posts) == $this->_offset)
-            {
-                $rdf .= "\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('container', $this->_id, $this->_page+1)."\"/>\n";
-            }
+            // TODO: test permission before?
+            $rdf .= "\t<sioc:container_of>\n";
+            // TODO: inluding title $rdf .= "\t\t<sioc:Post rdf:about=\"".."\" dc:title=\"".."\">\n";
+            $rdf .= "\t\t<sioc:Post rdf:about=\"".getAbsUrl(wl($article['id']))."\">\n";
+            $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('post',$article['id'])."\"/>\n";
+            $rdf .= "\t\t</sioc:Post>\n";
+            $rdf .= "\t</sioc:container_of>\n";
         }
         
+        //print_r($this->_subcontainers); die();
+        // TODO: Container 1 -> * Container ???
+        foreach($this->_subcontainers as $container)
+        {
+            $rdf .= "\t<sioc:container_of>\n";
+            // TODO: inluding title $rdf .= "\t\t<sioc:Post rdf:about=\"".."\" dc:title=\"".."\">\n";
+            $rdf .= "\t\t<sioc:Container rdf:about=\"".getAbsUrl(wl($container['id']))."\">\n";
+            $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('container',$container['id'])."\"/>\n";
+            $rdf .= "\t\t</sioc:Container>\n";
+            $rdf .= "\t</sioc:container_of>\n";
+        }
+
         $rdf .= "</".$this->_type.">\n";
         return $rdf;
     }
