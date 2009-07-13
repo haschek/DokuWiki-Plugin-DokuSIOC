@@ -310,23 +310,21 @@ class SIOCDokuWikiContainer extends SIOCObject
         {
             // TODO: test permission before?
             $rdf .= "\t<sioc:container_of>\n";
-            // TODO: inluding title $rdf .= "\t\t<sioc:Post rdf:about=\"".."\" dc:title=\"".."\">\n";
+            // TODO: inluding title/name
             $rdf .= "\t\t<sioc:Post rdf:about=\"".getAbsUrl(wl($article['id']))."\">\n";
             $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('post',$article['id'])."\"/>\n";
             $rdf .= "\t\t</sioc:Post>\n";
             $rdf .= "\t</sioc:container_of>\n";
         }
         
-        //print_r($this->_subcontainers); die();
-        // TODO: Container 1 -> * Container ???
         foreach($this->_subcontainers as $container)
         {
-            $rdf .= "\t<sioc:container_of>\n";
-            // TODO: inluding title $rdf .= "\t\t<sioc:Post rdf:about=\"".."\" dc:title=\"".."\">\n";
+            $rdf .= "\t<sioc:parent_of>\n";
+            // TODO: inluding title/name
             $rdf .= "\t\t<sioc:Container rdf:about=\"".getAbsUrl(wl($container['id']))."\">\n";
             $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"".$exp->siocURL('container',$container['id'])."\"/>\n";
             $rdf .= "\t\t</sioc:Container>\n";
-            $rdf .= "\t</sioc:container_of>\n";
+            $rdf .= "\t</sioc:parent_of>\n";
         }
 
         $rdf .= "</".$this->_type.">\n";

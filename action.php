@@ -38,6 +38,7 @@
  * - add: possibility to send noindex by x-robots-tag via HTTP header
  * - add: soft check for requested application type
  * - mod: use search method to get container content on next sub level
+ * - mod: better dc:title for foaf:document
  * poc
  * - proof of concept release under CC-BY-SA
  **/
@@ -323,7 +324,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     {
         global $ID, $INFO, $REV, $conf;
 
-        $exporter->setParameters($INFO['meta']['title'],
+        $exporter->setParameters('WikiArticle: '.$INFO['meta']['title'].($REV?' (rev '.$REV.')':''),
                             $this->_getDokuUrl(),
                             $this->_getDokuUrl().'doku.php?do=export_siocxml&',
                             'utf-8',
@@ -399,8 +400,22 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     function _exportContainercontent($exporter)
     {
         global $ID, $INFO, $conf;
+        
+        if ($ID == $conf['start'])
+        {
+            $title = $conf['start'];
+        }
+        elseif (isset($INFO['meta']['title']))
+        {
+            $title = $INFO['meta']['title'];
+        }
+        else
+        {
+            $title = $ID;
+        }
+        
     
-        $exporter->setParameters($conf['title'],
+        $exporter->setParameters('Container: '.$title,
                             getAbsUrl(),
                             getAbsUrl().'doku.php?do=export_siocxml&',
                             'utf-8',
