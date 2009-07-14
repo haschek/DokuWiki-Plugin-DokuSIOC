@@ -336,7 +336,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         $dwuserpage_id = cleanID($this->getConf('userns')).($conf['useslash']?'/':':').$INFO['editor'];
         if ($INFO['editor'] && $this->getConf('userns'))
             $pageuser = new SIOCUser($INFO['editor'],
-                                        $this->_getDokuUrl(wl($dwuserpage_id)), // user page
+                                        getAbsUrl(exportlink($dwuserpage_id, 'siocxml', array('type'=>'user'), false, '&')), // user page
                                         $INFO['meta']['contributor'][$INFO['editor']],
                                         getDwUserInfo($dwuserpage_id,$this,'mail'),
                                         '', // no homepage is saved for dokuwiki user
@@ -347,14 +347,16 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
                                     );
         
         // create wiki page object
+        $queryAttr = array('type'=>'post');
+        if ($REV) $queryAttr['rev'] = $REV;
         $wikipage = new SIOCDokuWikiArticle($ID, // id
-                                            $this->_getDokuUrl(wl($ID,($REV?"rev=$REV":''))), // url
+                                            getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')), // url
                                             $INFO['meta']['title'], // subject
                                             rawWiki($ID,$REV) // body (content)
                                             );
         /* encoded content   */ $wikipage->addContentEncoded(p_cached_output(wikiFN($ID,$REV),'xhtml'));
         /* make time         */ $wikipage->addCreated($this->_getDate($INFO['meta']['date']['created'],$INFO['meta']['date']['modified']));
-        /* creator           */ if ($INFO['editor'] && $this->getConf('userns')) $wikipage->addCreator(array('foaf:maker'=>'#'.$INFO['editor'],'sioc:creator'=>$this->_getDokuUrl(wl($dwuserpage_id))));
+        /* creator           */ if ($INFO['editor'] && $this->getConf('userns')) $wikipage->addCreator(array('foaf:maker'=>'#'.$INFO['editor'],'sioc:creator'=>getAbsUrl(exportlink($dwuserpage_id, 'siocxml', array('type'=>'user'), false, '&'))));
         /* intern wiki links */ $wikipage->addLinks($INFO['meta']['relation']['references']);
         // TODO: addLinksExtern
 

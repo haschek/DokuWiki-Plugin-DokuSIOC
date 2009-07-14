@@ -63,9 +63,9 @@ class SIOCDokuWikiArticle extends SIOCObject
         if (is_array($this->_creator))
         {
             if ($this->_creator['foaf:maker'])
-                $rdf .= "\t<foaf:maker rdf:resource=\"".$this->_creator['foaf:maker']."\"/>\n";
+                $rdf .= "\t<foaf:maker rdf:resource=\"".clean($this->_creator['foaf:maker'])."\"/>\n";
             if ($this->_creator['sioc:creator'])
-                $rdf .= "\t<sioc:has_creator rdf:resource=\"".$this->_creator['sioc:creator']."\"/>\n";
+                $rdf .= "\t<sioc:has_creator rdf:resource=\"".clean($this->_creator['sioc:creator'])."\"/>\n";
         }
 
         if ($this->_created)
