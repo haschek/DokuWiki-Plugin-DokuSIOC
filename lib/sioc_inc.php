@@ -1010,7 +1010,9 @@ class SIOCCategory extends SIOCObject {
 if (!function_exists('clean')) {
   function clean( $text ) {
 #    return htmlentities( $text );
-    return htmlentities2( $text );
+#    return htmlentities2( $text );
+    // double encoding is preventable now
+    return htmlspecialchars($text, ENT_COMPAT, 'UTF-8');
   }
 }
 

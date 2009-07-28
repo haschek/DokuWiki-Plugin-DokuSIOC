@@ -1,11 +1,17 @@
 <?php
 /**
- * DokuSIOC - 
+ * DokuSIOC - SIOC plugin for DokuWiki
  *
  * version 0.1
  *
- * 
+ * DokuSIOC integrates the SIOC ontology within DokuWiki and provides an
+ * alternate RDF/XML views of the wiki documents.
  *
+ * For DokuWiki we can't use the Triplify script because DokuWiki has not a RDBS
+ * backend. But the wiki API provides enough methods to get the data out, so
+ * DokuSIOC as a plugin uses the export hook to provide accessible data as
+ * RDF/XML, using the SIOC ontology as vocabulary. 
+ * 
  * METADATA
  *
  * @author    Michael Haschke @ eye48.com
@@ -38,7 +44,15 @@
  * - add: possibility to send noindex by x-robots-tag via HTTP header
  * - add: soft check for requested application type
  * - mod: use search method to get container content on next sub level
- * - mod: better dc:title for foaf:document
+ * - mod: better dc:title for foaf:document,
+ * - mod: better distinction between user/container/post resources
+ * - mod: normalize URIs
+ * - fix: URIs for SIOC documents
+ * - mod: use dcterms:created and sioc:has_creator only for first revision of wiki page b/c of inadequate meta data
+ * - add: backlinks from wiki via dcterms:isReferencedBy
+ * - add: contributors by sioc:has_modifier (only for last revision b/c of wrong meta data for older revisions)
+ * - rem: foaf:person link in sioct:WikiArticle b/c it routes to same data like sioc:has_creater/modifier
+ * - rem: Talis SIOC widget for comments b/c incompatibility with DokuWiki JS
  * poc
  * - proof of concept release under CC-BY-SA
  **/
@@ -48,6 +62,8 @@ if(!defined('DOKU_PLUGIN')) define('DOKU_PLUGIN',DOKU_INC.'lib/plugins/');
 require_once(DOKU_PLUGIN.'action.php');
  
 class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
+
+    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.1';
 
 
     /* -- Methods to manage plugin ------------------------------------------ */
@@ -82,6 +98,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     function checkAction($action, $controller)
     {
         global $INFO;
+        //print_r($INFO); die();
         
         if ($action->data == 'export_siocxml')
         {
@@ -103,8 +120,10 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         if ($data->data['preact'] == array('save'=>'Save') || $data->data['preact'] == 'save')
         {
             //die('http://pingthesemanticweb.com/rest/?url='.urlencode(getAbsUrl(wl($data->data['id']))));
-            $ping = fopen('http://pingthesemanticweb.com/rest/?url='.urlencode(getAbsUrl(wl($data->data['id']))),'r');
-            fclose($ping);
+            //$ping = fopen('http://pingthesemanticweb.com/rest/?url='.urlencode(getAbsUrl(wl($data->data['id']))),'r');
+            // it must be a post, and it's the last revision
+            $ping = @fopen('http://pingthesemanticweb.com/rest/?url='.urlencode(normalizeUri(getAbsUrl(exportlink($data->data['id'], 'siocxml', array('type'=>'post'), false, '&')))),'r');
+            @fclose($ping);
         }
     }
     
@@ -162,12 +181,12 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         }
     
         $metalink['title'] = $title;
-        $metalink['href'] = getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'));
+        $metalink['href'] = normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')));
 
         // forward to rdfxml document if requested
         if ($this->isRdfXmlRequest())
         {
-            header('Location: '.$metalink['href']);
+            header('Location: '.$metalink['href'], true, 303);
         }
         else
         {
@@ -202,6 +221,8 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         if (!$INFO['perm']) // not enough rights to see the wiki page
             $this->_exit("HTTP/1.0 401 Unauthorized");
 
+        // Forward to URI with explicit type attribut
+        if (!isset($_GET['type'])) header('Location:'.$_SERVER['REQUEST_URI'].'&type='.$sioc_type);
 
         // Include SIOC libs
         
@@ -240,23 +261,34 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     }
     
     function isRdfXmlRequest()
-    {
+    {   
         // get accepted types
         $http_accept = trim($_SERVER['HTTP_ACCEPT']);
         
+        // save accepted types in array
+        $accepted = explode(',', $http_accept);
+        
+        /*
+        $debuginfo = implode(' // ', array(date('c',$_SERVER['REQUEST_TIME']), $_SERVER['HTTP_REFERER'], $_SERVER['REMOTE_ADDR'], $_SERVER['REMOTE_HOST'], $_SERVER['HTTP_USER_AGENT'], $_SERVER['HTTP_ACCEPT']));
+        global $conf; //print_r($conf); die();
+        //die($debuginfo);
+        $debuglog = @fopen($conf['tmpdir'].DIRECTORY_SEPARATOR.'requests.log', 'ab');
+        @fwrite($debuglog, $debuginfo."\n");
+        @fclose($debuglog);
+        @chmod($conf['tmpdir'].DIRECTORY_SEPARATOR.'requests.log', 0777);
+        */
+        
         // soft check, route to RDF when client requests it (don't check quality of request)
-        if ($this->getConf('softck') && strpos($http_accept, 'application/rdf+xml') !== false)
+        
+        if ($this->getConf('softck') && strpos($_SERVER['HTTP_ACCEPT'], 'application/rdf+xml') !== false)
         {
             return true;
         }
         
-        // hard check, only serve RDF if it is requested first or equal to first type
-    
-        // save accepted types in array
-        $accepted = explode(',', $http_accept);
-        
         if (count($accepted)>0)
         {
+            // hard check, only serve RDF if it is requested first or equal to first type
+    
             // extract accepting ratio
             $test_accept = array();
             foreach($accepted as $format)
@@ -281,6 +313,8 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
                 return true;
             }
         }
+
+        // print_r($accepted_order);print_r($test_accept);die();
 
         return false;
 
@@ -328,36 +362,59 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
                             $this->_getDokuUrl(),
                             $this->_getDokuUrl().'doku.php?do=export_siocxml&',
                             'utf-8',
-                            'http://eye48.com/go/dokusioc'
+                            $this->agentlink
                             );
 
         // create user object
         // $id, $uri, $name, $email, $homepage='', $foaf_uri='', $role=false, $nick='', $sioc_url='', $foaf_url=''
         $dwuserpage_id = cleanID($this->getConf('userns')).($conf['useslash']?'/':':').$INFO['editor'];
+        /*
         if ($INFO['editor'] && $this->getConf('userns'))
             $pageuser = new SIOCUser($INFO['editor'],
-                                        getAbsUrl(exportlink($dwuserpage_id, 'siocxml', array('type'=>'user'), false, '&')), // user page
+                                        normalizeUri(getAbsUrl(exportlink($dwuserpage_id, 'siocxml', array('type'=>'user'), false, '&'))), // user page
                                         $INFO['meta']['contributor'][$INFO['editor']],
                                         getDwUserInfo($dwuserpage_id,$this,'mail'),
                                         '', // no homepage is saved for dokuwiki user
                                         '#'.$INFO['editor'], // local uri
                                         false, // no roles right now
                                         '', // no nick name is saved for dokuwiki user
-                                        $exporter->siocURL('user', $dwuserpage_id)
+                                        normalizeUri($exporter->siocURL('user', $dwuserpage_id))
                                     );
+        */
         
         // create wiki page object
         $queryAttr = array('type'=>'post');
         if ($REV) $queryAttr['rev'] = $REV;
         $wikipage = new SIOCDokuWikiArticle($ID, // id
-                                            getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')), // url
+                                            normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'))), // url
                                             $INFO['meta']['title'], // subject
                                             rawWiki($ID,$REV) // body (content)
                                             );
         /* encoded content   */ $wikipage->addContentEncoded(p_cached_output(wikiFN($ID,$REV),'xhtml'));
-        /* make time         */ $wikipage->addCreated($this->_getDate($INFO['meta']['date']['created'],$INFO['meta']['date']['modified']));
-        /* creator           */ if ($INFO['editor'] && $this->getConf('userns')) $wikipage->addCreator(array('foaf:maker'=>'#'.$INFO['editor'],'sioc:creator'=>getAbsUrl(exportlink($dwuserpage_id, 'siocxml', array('type'=>'user'), false, '&'))));
+        /* created           */ if (isset($INFO['meta']['date']['created'])) $wikipage->addCreated(date('c', $INFO['meta']['date']['created']));
+        /* or modified       */ if (isset($INFO['meta']['date']['modified'])) $wikipage->addModified(date('c', $INFO['meta']['date']['modified']));
+        /* creator/modifier  */ if ($INFO['editor'] && $this->getConf('userns')) $wikipage->addCreator(array('foaf:maker'=>'#'.$INFO['editor'],'sioc:modifier'=>$dwuserpage_id));
+        /* is creator        */ if (isset($INFO['meta']['date']['created'])) $wikipage->isCreator();
         /* intern wiki links */ $wikipage->addLinks($INFO['meta']['relation']['references']);
+        
+        // contributors - only for last revision b/c of wrong meta data for older revisions
+        if (!$REV && $this->getConf('userns') && isset($INFO['meta']['contributor']))
+        {
+            $cont_temp = array();
+            $cont_ns = $this->getConf('userns').($conf['useslash']?'/':':');
+            foreach($INFO['meta']['contributor'] as $cont_id => $cont_name)
+                $cont_temp[$cont_ns.$cont_id] = $cont_name;
+            $wikipage->addContributors($cont_temp);
+        }
+        
+        // backlinks - only for last revision
+        if (!$REV)
+        {
+            require_once(DOKU_INC.'inc/fulltext.php');
+            $backlinks = ft_backlinks($ID);
+            if (count($backlinks) > 0) $wikipage->addBacklinks($backlinks);
+        }
+        
         // TODO: addLinksExtern
 
         /* previous and next revision */
@@ -385,15 +442,14 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
 
         /* latest revision   */ if ($REV) $wikipage->addVersionLatest();
         // TODO: topics
-        // TODO: container
-        /* has_container     */ $wikipage->addContainer($conf['start']); 
+        /* has_container     */ if ($INFO['namespace']) $wikipage->addContainer($INFO['namespace']); 
         /* has_space         */ if ($this->getConf('owners')) $wikipage->addSite($this->getConf('owners')); 
         // TODO: dc:contributor / has_modifier
         // TODO: attachment (e.g. pictures in that dwns)
         
         // add wiki page to exporter
         $exporter->addObject($wikipage);
-        if ($INFO['editor'] && $this->getConf('userns')) $exporter->addObject($pageuser);
+        //if ($INFO['editor'] && $this->getConf('userns')) $exporter->addObject($pageuser);
         
         return $exporter;
         
@@ -421,14 +477,18 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
                             getAbsUrl(),
                             getAbsUrl().'doku.php?do=export_siocxml&',
                             'utf-8',
-                            'http://eye48.com/go/dokusioc'
+                            $this->agentlink
                             );
 
         // create container object
-        $wikicontainer = new SIOCDokuWikiContainer($ID, getAbsUrl(wl($ID)));
+        $queryAttr = array('type'=>'container');
+        $wikicontainer = new SIOCDokuWikiContainer($ID,
+                                                   normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')))
+                                                  );
 
         /* container is type=wiki */ if ($ID == $conf['start']) $wikicontainer->isWiki();
-        /* sioc:name */ if ($INFO['exists']) $wikicontainer->addTitle($INFO['meta']['title']);
+        /* sioc:name              */ if ($INFO['exists']) $wikicontainer->addTitle($INFO['meta']['title']);
+        /* has_parent             */ if ($INFO['namespace']) $wikicontainer->addParent($INFO['namespace']); 
 
         // search next level entries (posts, sub containers) in container
         require_once(DOKU_INC.'inc/search.php');
@@ -465,18 +525,28 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     function _exportUsercontent($exporter)
     {
         global $ID;
-        
+                
         // get user info
-        $userinfo = $auth->getUserData($ID,$this);
-        $exporter->setParameters($userinfo['name'],
+        $userinfo = getDwUserInfo($ID,$this);
+        
+        // no userinfo means there is n user space or user does not exists
+        if ($userinfo === false)
+            $this->_exit("HTTP/1.0 404 Not Found");
+        
+        $exporter->setParameters('User: '.$userinfo['name'],
                             getAbsUrl(),
                             getAbsUrl().'doku.php?do=export_siocxml&',
                             'utf-8',
-                            'http://eye48.com/go/dokusioc'
+                            $this->agentlink
                             );
         // create user object
         //print_r($userinfo); die();
-        $wikiuser = new SIOCDokuWikiUser($ID, getAbsUrl(wl($ID)), $userid, $userinfo['name'], $userinfo['mail']);
+        $queryAttr = array('type'=>'user');
+        $wikiuser = new SIOCDokuWikiUser($ID,
+                                         normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'))),
+                                         $userid,
+                                         $userinfo['name'],
+                                         $userinfo['mail']);
         /* TODO: avatar (using Gravatar) */
         /* TODO: creator_of */
         // add user to exporter
@@ -558,5 +628,30 @@ if (!function_exists('getDwUserInfo'))
     }
 }
 
-
+// sort query attributes by name
+if (!function_exists('normalizeUri'))
+{
+    function normalizeUri($uri)
+    {
+        // part URI
+        $parts = explode('?', $uri);
+        
+        // part query
+        if (isset($parts[1]))
+        {
+            $query = $parts[1];
+            
+            // test separator
+            $sep = '&';
+            if (strpos($query, '&amp;') !== false) $sep = '&amp;';
+            $attr = explode($sep, $query);
+            
+            sort($attr);
+            
+            $parts[1] = implode($sep, $attr);
+        }
+        
+        return implode('?', $parts);
+    }
+}
 
