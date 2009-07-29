@@ -60,7 +60,7 @@ class SIOCDokuWikiArticle extends SIOCObject
 
     function getContent( &$exp )
     {
-        $rdf = '<'.$this->_type." rdf:about=\"" . clean($this->_url) . "\">\n";
+        $rdf = '<'.$this->_type." rdf:about=\"" . clean($this->_url, true) . "\">\n";
         if ($this->_subject)
         {
             $rdf .= "\t<dc:title>" . clean($this->_subject) . "</dc:title>\n";
@@ -107,7 +107,7 @@ class SIOCDokuWikiArticle extends SIOCObject
         
         if ($this->_has_space)
         {
-            $rdf .= "\t<sioc:has_space rdf:resource=\"".clean($this->_has_space)."\" />\n";
+            $rdf .= "\t<sioc:has_space rdf:resource=\"".clean($this->_has_space, true)."\" />\n";
             // TODO: rdfs:label
         }
         
@@ -269,7 +269,7 @@ class SIOCDokuWikiUser extends SIOCObject
      }
 
     function getContent( &$exp ) {
-        $rdf = "<sioc:User rdf:about=\"" . clean($this->_url) ."\">\n";
+        $rdf = "<sioc:User rdf:about=\"" . clean($this->_url, true) ."\">\n";
         if($this->_nick) $rdf .= "\t<sioc:name>" . clean($this->_nick) . "</sioc:name>\n";
         if($this->_email) {
             if ($exp->_export_email) { $rdf .= "\t<sioc:email rdf:resource=\"" . $this->_email ."\"/>\n"; }
@@ -326,7 +326,7 @@ class SIOCDokuWikiContainer extends SIOCObject
     function addParent($id) { $this->_has_parent = $id; }
 
     function getContent( &$exp ) {
-        $rdf = '<'.$this->_type." rdf:about=\"" . normalizeUri(clean($this->_url)) . "\" >\n";
+        $rdf = '<'.$this->_type." rdf:about=\"" . normalizeUri(clean($this->_url, true)) . "\" >\n";
         
         if ($this->_title)
         {

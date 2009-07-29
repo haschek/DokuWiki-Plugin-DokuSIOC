@@ -30,6 +30,7 @@ class SIOCExporter {
     var $_title;
     var $_blog_url;
     var $_sioc_url;
+    var $_profile_url;
     var $_encoding;
     var $_generator;
 
@@ -114,11 +115,11 @@ class SIOCExporter {
 		($this->_url_suffix && !isset($this->_ignore_suffix[$type])) ? $suffix = $this->_urlseparator . $this->_url_suffix : $suffix = '';
 		
 		$siocURL = $this->_sioc_url . $type_part . $id_part . $page_part . $suffix ;
-		return clean($siocURL);
+		return clean($siocURL, true);
 	}
 	
     function export( $rdf_content='' ) {
-        header('Content-Type: application/rdf+xml; charset='.$this->_encoding);
+        header('Content-Type: application/rdf+xml; charset='.$this->_encoding, true, 200);
         echo $this->makeRDF($rdf_content);
     }
 
@@ -138,12 +139,12 @@ class SIOCExporter {
     xmlns:sioc="http://rdfs.org/sioc/ns#"
     xmlns:sioct="http://rdfs.org/sioc/types#"
     xmlns:owl="http://www.w3.org/2002/07/owl">
-<foaf:Document rdf:about="">
+<foaf:Document rdf:about="'.clean($this->_profile_url, true).'">
 	<dc:title>SIOC profile for "'.clean($this->_title).'"</dc:title>
 	<dc:description>A SIOC profile describes the structure and contents of a community site (e.g., weblog) in a machine processable form. For more information refer to the '.clean('<a href="http://rdfs.org/sioc">SIOC project page</a>').'</dc:description>
-	<foaf:primaryTopic rdf:resource="'.clean($this->_objects[0]->_url).'"/>
-	<admin:generatorAgent rdf:resource="'.clean(EXPORTER_URL).'?version='.EXPORTER_VERSION.'"/>
-	<admin:generatorAgent rdf:resource="'.clean($this->_generator).'"/>
+	<foaf:primaryTopic rdf:resource="'.clean($this->_objects[0]->_url,true).'"/>
+	<admin:generatorAgent rdf:resource="'.clean($this->_generator, true).'"/>
+	<admin:generatorAgent rdf:resource="'.clean(EXPORTER_URL, true).'?version='.EXPORTER_VERSION.'"/>
 </foaf:Document>'."\n";
         if ($rdf_content) $rdf .= $rdf_content; 
         if (sizeof($this->_objects)) {
@@ -1008,10 +1009,12 @@ class SIOCCategory extends SIOCObject {
  * Transforms text so that it can be safely put into XML markup
  */
 if (!function_exists('clean')) {
-  function clean( $text ) {
+  function clean( $text , $url = false) {
 #    return htmlentities( $text );
 #    return htmlentities2( $text );
     // double encoding is preventable now
+    // $text = htmlspecialchars_decode($text, ENT_COMPAT);
+    if ($url) $text = str_replace('&amp;','&', $text);
     return htmlspecialchars($text, ENT_COMPAT, 'UTF-8');
   }
 }

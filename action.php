@@ -2,7 +2,7 @@
 /**
  * DokuSIOC - SIOC plugin for DokuWiki
  *
- * version 0.1
+ * version 0.11
  *
  * DokuSIOC integrates the SIOC ontology within DokuWiki and provides an
  * alternate RDF/XML views of the wiki documents.
@@ -17,7 +17,7 @@
  * @author    Michael Haschke @ eye48.com
  * @copyright 2009 Michael Haschke
  * @license   http://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU General Public License 2.0 (GPLv2)
- * @version   0.1
+ * @version   0.11
  *
  * WEBSITES
  *
@@ -37,6 +37,12 @@
  *
  * CHANGELOG
  *
+ * 0.11 (bugfix release)
+ * - fix header output for content negotiation
+ * - fix URIs for profile and SIOC ressource
+ * - better dc:title for revisions
+ * - add complete URI to rdf:about for foaf:Document (Profile) to make it explicit
+ * - add rel="canonical" for URIs with type parameter, to prevent double content
  * 0.1
  * - exchange licence b/c CC-BY-SA was incompatible with GPL
  * - restructuring code base
@@ -63,7 +69,7 @@ require_once(DOKU_PLUGIN.'action.php');
  
 class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
 
-    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.1';
+    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.11';
 
 
     /* -- Methods to manage plugin ------------------------------------------ */
@@ -87,6 +93,8 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     */
     function register(&$controller)
     {
+        //print_r(headers_list()); die();
+        
         // test the requested action
         $controller->register_hook('ACTION_ACT_PREPROCESS', 'BEFORE',  $this, 'checkAction', $controller);
         // pingthesemanticweb.com
@@ -99,7 +107,8 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     {
         global $INFO;
         //print_r($INFO); die();
-        
+        //print_r(headers_list()); die();
+
         if ($action->data == 'export_siocxml')
         {
             // give back rdf
@@ -107,9 +116,27 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         }
         elseif ($action->data == 'show' && $INFO['perm'] && !defined('DOKU_MEDIADETAIL') && ($INFO['exists'] || getDwUserInfo($INFO['id'],$this)) && !isHiddenPage($INFO['id']))
         {
-            // add meta link to html head
-            $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE',  $this, 'createRdfLink');
+            if ($this->isRdfXmlRequest())
+            {
+                // forward to rdfxml document if requested
+                // print_r(headers_list()); die();
+                $location = $this->createRdfLink();
+                if (function_exists('header_remove')) header_remove();
+                header('Location: '.$location['href'], true, 303); exit();
+            }
+            else
+            {
+                // add meta link to html head
+                $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE',  $this, 'createRdfLink');
+            }
         }
+        /*
+        else
+        {
+            print_r(array($action->data, $INFO['perm'], defined('DOKU_MEDIADETAIL'), $INFO['exists'], getDwUserInfo($INFO['id'],$this), isHiddenPage($INFO['id'])));
+            die();
+        }
+        */
     }
     
     function pingService($data, $controller)
@@ -129,7 +156,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     
     /**
     */
-    function createRdfLink(&$event, $param)
+    function createRdfLink(&$event = null, $param = null)
     {
         global $ID, $INFO, $conf;
         
@@ -183,17 +210,16 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         $metalink['title'] = $title;
         $metalink['href'] = normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')));
 
-        // forward to rdfxml document if requested
-        if ($this->isRdfXmlRequest())
+        if ($event !== null)
         {
-            header('Location: '.$metalink['href'], true, 303);
-        }
-        else
-        {
-            $event->data["link"][] = $metalink;
+            $event->data['link'][] = $metalink;
+            
+            // set canocial link for type URIs to prevent indexing double content
+            if ($_GET['type'])
+                $event->data['link'][] = array('rel'=>'canonical', 'href'=>getAbsUrl(wl($ID)));
         }
         
-        return;
+        return $metalink;
     }
     
     /* -- public class methods ---------------------------------------------- */
@@ -222,7 +248,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             $this->_exit("HTTP/1.0 401 Unauthorized");
 
         // Forward to URI with explicit type attribut
-        if (!isset($_GET['type'])) header('Location:'.$_SERVER['REQUEST_URI'].'&type='.$sioc_type);
+        if (!isset($_GET['type'])) header('Location:'.$_SERVER['REQUEST_URI'].'&type='.$sioc_type, true, 302);
 
         // Include SIOC libs
         
@@ -232,6 +258,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         // Create exporter
         
         $rdf = new SIOCExporter();
+        $rdf->_profile_url = normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', array('type'=>$sioc_type), false, '&')));
         $rdf->setURLParameters('type', 'id', 'page', false);
         
         // Create SIOC-RDF content
@@ -257,6 +284,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             header("X-Robots-Tag: noindex", true);
         $rdf->export();
         
+        //print_r(headers_list()); die();
         die();
     }
     
@@ -360,7 +388,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
 
         $exporter->setParameters('WikiArticle: '.$INFO['meta']['title'].($REV?' (rev '.$REV.')':''),
                             $this->_getDokuUrl(),
-                            $this->_getDokuUrl().'doku.php?do=export_siocxml&',
+                            $this->_getDokuUrl().'doku.php?',
                             'utf-8',
                             $this->agentlink
                             );
@@ -383,11 +411,9 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         */
         
         // create wiki page object
-        $queryAttr = array('type'=>'post');
-        if ($REV) $queryAttr['rev'] = $REV;
         $wikipage = new SIOCDokuWikiArticle($ID, // id
-                                            normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'))), // url
-                                            $INFO['meta']['title'], // subject
+                                            normalizeUri($exporter->siocURL('post', $ID.($REV?$exporter->_urlseparator.'rev'.$exporter->_urlequal.$REV:''))), // url
+                                            $INFO['meta']['title'].($REV?' (rev '.$REV.')':''), // subject
                                             rawWiki($ID,$REV) // body (content)
                                             );
         /* encoded content   */ $wikipage->addContentEncoded(p_cached_output(wikiFN($ID,$REV),'xhtml'));
@@ -475,15 +501,14 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     
         $exporter->setParameters('Container: '.$title,
                             getAbsUrl(),
-                            getAbsUrl().'doku.php?do=export_siocxml&',
+                            getAbsUrl().'doku.php?',
                             'utf-8',
                             $this->agentlink
                             );
 
         // create container object
-        $queryAttr = array('type'=>'container');
         $wikicontainer = new SIOCDokuWikiContainer($ID,
-                                                   normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&')))
+                                                   normalizeUri($exporter->siocURL('container', $ID))
                                                   );
 
         /* container is type=wiki */ if ($ID == $conf['start']) $wikicontainer->isWiki();
@@ -511,6 +536,10 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             }
         }
         
+        // without sub content it can't be a container (so it does not exist as a container)
+        if (count($posts) + count($containers) == 0)
+            $this->_exit("HTTP/1.0 404 Not Found");
+        
         if (count($posts)>0) $wikicontainer->addArticles($posts);
         if (count($containers)>0) $wikicontainer->addContainers($containers);
 
@@ -535,15 +564,14 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         
         $exporter->setParameters('User: '.$userinfo['name'],
                             getAbsUrl(),
-                            getAbsUrl().'doku.php?do=export_siocxml&',
+                            getAbsUrl().'doku.php?',
                             'utf-8',
                             $this->agentlink
                             );
         // create user object
         //print_r($userinfo); die();
-        $queryAttr = array('type'=>'user');
         $wikiuser = new SIOCDokuWikiUser($ID,
-                                         normalizeUri(getAbsUrl(exportlink($ID, 'siocxml', $queryAttr, false, '&'))),
+                                         normalizeUri($exporter->siocURL('user', $ID)),
                                          $userid,
                                          $userinfo['name'],
                                          $userinfo['mail']);
@@ -552,6 +580,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         // add user to exporter
         $exporter->addObject($wikiuser);
         
+        //print_r(headers_list());die();
         return $exporter;
     }
     
