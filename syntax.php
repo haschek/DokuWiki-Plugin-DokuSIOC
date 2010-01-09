@@ -2,6 +2,7 @@
 /**
  * Plugin Now: Inserts Talis code for SIOC comments widget
  * 
+ * DEPRECATED!!!
  */
  
 // must be run within DokuWiki

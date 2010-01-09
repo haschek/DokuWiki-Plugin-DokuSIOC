@@ -2,7 +2,7 @@
 /**
  * DokuSIOC - SIOC plugin for DokuWiki
  *
- * version 0.11
+ * version 0.1.1
  *
  * DokuSIOC integrates the SIOC ontology within DokuWiki and provides an
  * alternate RDF/XML views of the wiki documents.
@@ -17,7 +17,7 @@
  * @author    Michael Haschke @ eye48.com
  * @copyright 2009 Michael Haschke
  * @license   http://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU General Public License 2.0 (GPLv2)
- * @version   0.11
+ * @version   0.1.1
  *
  * WEBSITES
  *
@@ -37,7 +37,7 @@
  *
  * CHANGELOG
  *
- * 0.11 (bugfix release)
+ * 0.1.1 (bugfix release)
  * - fix header output for content negotiation
  * - fix URIs for profile and SIOC ressource
  * - better dc:title for revisions
@@ -69,7 +69,7 @@ require_once(DOKU_PLUGIN.'action.php');
  
 class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
 
-    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.11';
+    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.1.1';
 
 
     /* -- Methods to manage plugin ------------------------------------------ */
