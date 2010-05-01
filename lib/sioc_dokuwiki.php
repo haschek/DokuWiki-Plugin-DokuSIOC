@@ -269,7 +269,7 @@ class SIOCDokuWikiUser extends SIOCObject
      }
 
     function getContent( &$exp ) {
-        $rdf = "<sioc:User rdf:about=\"" . clean($this->_url, true) ."\">\n";
+        $rdf = "<sioc:UserAccount rdf:about=\"" . clean($this->_url, true) ."\">\n";
         if($this->_nick) $rdf .= "\t<sioc:name>" . clean($this->_nick) . "</sioc:name>\n";
         if($this->_email) {
             if ($exp->_export_email) { $rdf .= "\t<sioc:email rdf:resource=\"" . $this->_email ."\"/>\n"; }
@@ -290,7 +290,7 @@ class SIOCDokuWikiUser extends SIOCObject
         $rdf .= "\t\t</foaf:Person>\n";  
         $rdf .= "\t</sioc:account_of>\n";
         //if($this->_sioc_url) { $rdf .= "\t\t\t<rdfs:seeAlso rdf:resource=\"". $this->_sioc_url ."\"/>\n"; }
-        $rdf .= "</sioc:User>\n";    
+        $rdf .= "</sioc:UserAccount>\n";    
 
         return $rdf;
     }

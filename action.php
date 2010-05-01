@@ -2,7 +2,7 @@
 /**
  * DokuSIOC - SIOC plugin for DokuWiki
  *
- * version 0.1.1
+ * version 0.1.2
  *
  * DokuSIOC integrates the SIOC ontology within DokuWiki and provides an
  * alternate RDF/XML views of the wiki documents.
@@ -17,11 +17,12 @@
  * @author    Michael Haschke @ eye48.com
  * @copyright 2009 Michael Haschke
  * @license   http://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU General Public License 2.0 (GPLv2)
- * @version   0.1.1
+ * @version   0.1.2
  *
  * WEBSITES
  *
  * @link      http://eye48.com/go/dokusioc Plugin Website and Overview
+ * @link      http://github.com/haschek/DokuWiki-Plugin-DokuSIOC/issues Issue tracker
  *
  * LICENCE
  * 
@@ -37,6 +38,10 @@
  *
  * CHANGELOG
  *
+ * 0.1.2
+ * - fix: meta link to post type is standard use now (issue 9)
+ * - mod: titles for SIOC documents (issue 10)
+ * - mod: use sioc:UserAccount instead of deprecated sioc:User (issue 2)
  * 0.1.1 (bugfix release)
  * - fix header output for content negotiation
  * - fix URIs for profile and SIOC ressource
@@ -69,7 +74,7 @@ require_once(DOKU_PLUGIN.'action.php');
  
 class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
 
-    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.1.1';
+    var $agentlink = 'http://eye48.com/go/dokusioc?v=0.1.2';
 
 
     /* -- Methods to manage plugin ------------------------------------------ */
@@ -81,9 +86,9 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         return array(
 	         'author' => 'Michael Haschke',
 	         'email'  => 'haschek@eye48.com',
-	         'date'   => '2009-07-08',
+	         'date'   => '2010-05-01',
 	         'name'   => 'DokuSIOC',
-	         'desc'   => 'Adds alternate link to SIOC-RDF document to meta header, creates SIOC version of wiki content and checks the requested application type.',
+	         'desc'   => 'DokuSIOC makes your wiki part of the Semantic Web! It integrates the SIOC ontology within DokuWiki and provides an alternate RDF/XML export of the wiki pages.',
 	         'url'    => 'http://eye48.com/go/dokusioc'
 	         );
     }
@@ -114,7 +119,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             // give back rdf
             $this->exportSioc();
         }
-        elseif ($action->data == 'show' && $INFO['perm'] && !defined('DOKU_MEDIADETAIL') && ($INFO['exists'] || getDwUserInfo($INFO['id'],$this)) && !isHiddenPage($INFO['id']))
+        elseif (($action->data == 'show' || $action->data == 'index') && $INFO['perm'] && !defined('DOKU_MEDIADETAIL') && ($INFO['exists'] || getDwUserInfo($INFO['id'],$this)) && !isHiddenPage($INFO['id']))
         {
             if ($this->isRdfXmlRequest())
             {
@@ -189,18 +194,18 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         switch ($sioc_type)
         {
             case 'container':
-                $title = htmlentities("SIOC document as RDF-XML for wiki '".$conf['title']."'");
+                $title = htmlentities("Container '".(isset($INFO['meta']['title'])?$INFO['meta']['title']:$ID)."' (SIOC document as RDF/XML)");
                 $queryAttr = array('type'=>'container');
                 break;
                 
             case 'user':
-                $title = htmlentities("SIOC document as RDF-XML for user '".$userinfo['name']."'");
+                $title = htmlentities("User account '".$userinfo['name']."' (SIOC document as RDF/XML)");
                 $queryAttr =  array('type'=>'user');
                 break;
 
             case 'post':
             default:
-                $title = htmlentities("SIOC document as RDF-XML for article '".$INFO['meta']['title']."'");
+                $title = htmlentities("Article '".$INFO['meta']['title']."' (SIOC document as RDF/XML)");
                 $queryAttr =  array('type'=>'post');
                 if (isset($_GET['rev']) && $_GET['rev'] == intval($_GET['rev']))
                     $queryAttr['rev'] = $_GET['rev'];
@@ -363,7 +368,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
             {
                 $type = 'user';
             }
-            elseif ($ID == $conf['start'])
+            elseif (isset($_GET['do']) && $_GET['do'] == 'index')
             {
                 $type = 'container';
             }
@@ -386,7 +391,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
     {
         global $ID, $INFO, $REV, $conf;
 
-        $exporter->setParameters('WikiArticle: '.$INFO['meta']['title'].($REV?' (rev '.$REV.')':''),
+        $exporter->setParameters('Article: '.$INFO['meta']['title'].($REV?' (rev '.$REV.')':''),
                             $this->_getDokuUrl(),
                             $this->_getDokuUrl().'doku.php?',
                             'utf-8',
@@ -487,7 +492,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         
         if ($ID == $conf['start'])
         {
-            $title = $conf['start'];
+            $title = $conf['title'];
         }
         elseif (isset($INFO['meta']['title']))
         {
@@ -562,7 +567,7 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         if ($userinfo === false)
             $this->_exit("HTTP/1.0 404 Not Found");
         
-        $exporter->setParameters('User: '.$userinfo['name'],
+        $exporter->setParameters('Account: '.$userinfo['name'],
                             getAbsUrl(),
                             getAbsUrl().'doku.php?',
                             'utf-8',
