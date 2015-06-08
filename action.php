@@ -449,7 +449,8 @@ class action_plugin_dokusioc extends DokuWiki_Action_Plugin {
         // TODO: addLinksExtern
 
         /* previous and next revision */
-        $pagerevs = getRevisions($ID,0,$conf['recent']+1);
+        $changelog = new PageChangeLog($ID);
+        $pagerevs = $changelog->getRevisions(0,$conf['recent']+1);
         $prevrev = false; $nextrev = false;
         if (!$REV)
         {
