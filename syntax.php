@@ -29,8 +29,8 @@ class syntax_plugin_dokusioc extends DokuWiki_Syntax_Plugin {
     function getType() { return 'substition'; }
     function getSort() { return 999; }
     function connectTo($mode) { $this->Lexer->addSpecialPattern('\[SIOCCOMMENTS\]',$mode,'plugin_dokusioc'); }
-    function handle($match, $state, $pos, &$handler){ return array($match, $state, $pos); }
-    function render($mode, &$renderer, $data) {
+    function handle($match, $state, $pos, Doku_Handler $handler){ return array($match, $state, $pos); }
+    function render($mode, Doku_Renderer $renderer, $data) {
     /*
       if($mode == 'xhtml'){
           $renderer->doc .= '<div class="sioc-has_reply"></div><script type="text/javascript" charset="utf-8" src="http://n2.talis.com/svn/playground/kwijibo/javascript/sioc-comments/bundle.js"></script>';
